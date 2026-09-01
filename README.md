@@ -22,7 +22,7 @@ Este proyecto es una pieza de un ecosistema de 3 repositorios que se complementa
                                   (puerto 8080)                          (puerto 8081)
                                         │                                      │
                                         └──────────► Kafka broker ◄────────────┘
-                                                    (192.168.2.10:9092)
+                                                    (localhost:9092 por defecto)
 ```
 
 1. Un cliente externo llama a un endpoint REST del servicio [**productor**](https://github.com/JulianMorenoSoftware/demo-kafka-producer-springboot).
@@ -70,7 +70,7 @@ spring:
   application:
     name: demo-kafka
   kafka:
-    bootstrap-servers: 192.168.2.10:9092
+    bootstrap-servers: localhost:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -92,7 +92,7 @@ app:
 Explicación propiedad por propiedad:
 
 - `server.port: 8081`: puerto HTTP del servicio. Se fija explícitamente en 8081 para no chocar con el productor, que corre en el 8080 (por defecto). Este servicio no expone endpoints REST propios hoy; el puerto solo es relevante para health checks o futura administración vía Actuator.
-- `spring.kafka.bootstrap-servers`: dirección `host:puerto` del broker de Kafka. Debe apuntar al mismo broker que usa el productor (`192.168.2.10:9092`, la IP anunciada por `kafka-broker-docker`). Ajusta este valor si tu entorno usa otra IP/host.
+- `spring.kafka.bootstrap-servers`: dirección `host:puerto` del broker de Kafka. Por defecto es `localhost:9092`, coherente con el puerto que expone `kafka-broker-docker` (`9092:9092`) cuando el broker corre en tu misma máquina. Debe apuntar al mismo broker que usa el productor. Si el broker corre en otra IP de tu red (real o de la empresa), **no edites este archivo**: sobrescribe la propiedad exportando la variable de entorno `SPRING_KAFKA_BOOTSTRAP_SERVERS=<ip-real>:9092` antes de levantar la aplicación (Spring Boot mapea automáticamente esa variable a `spring.kafka.bootstrap-servers`).
 - `spring.kafka.consumer.group-id: demo-kafka-group`: identifica el *consumer group* al que pertenece esta instancia. Todos los listeners de esta app comparten el mismo group-id, lo que significa que si se levantan varias instancias de este servicio, Kafka repartirá las particiones entre ellas (escalado horizontal por partición) en lugar de duplicar el procesamiento.
 - `spring.kafka.consumer.auto-offset-reset: earliest`: si este consumer group nunca leyó un topic antes (o su offset guardado ya no existe en el broker), empieza a leer **desde el mensaje más antiguo disponible**, en vez de solo los mensajes nuevos que lleguen a partir de ahora. Útil en demos, para no "perderse" eventos publicados antes de levantar el consumidor.
 - `spring.kafka.consumer.key-deserializer` / `value-deserializer`: cómo se interpretan la clave y el valor de cada mensaje. Clave como `String`, valor como JSON.
@@ -189,6 +189,10 @@ Como `spring-kafka` usa `JsonSerializer`/`JsonDeserializer`, el productor incluy
 **Esto queda documentado deliberadamente, no oculto:** sirve como ejemplo real de que dos servicios pueden compilar perfectamente por separado y aun así romper su integración si el contrato de evento (nombre de clase y forma de los campos) no se coordina entre quien publica y quien consume. Antes de demostrar este flujo en vivo, hay que alinear ambos proyectos para que usen el mismo record de evento en `count-topic`.
 
 El flujo de **`greetings-topic` sí es consistente** de punta a punta: mismo record `GreetingEvent` en ambos proyectos, por lo que la deserialización funciona sin problemas.
+
+## 🔒 Nota de seguridad: no hardcodear IPs reales en este repo
+
+Este repositorio es **público**. `spring.kafka.bootstrap-servers` usa `localhost:9092` como valor por defecto a propósito, en vez de una IP real de la red interna: el broker de Kafka de [`kafka-broker-docker`](https://github.com/JulianMorenoSoftware/kafka-broker-docker) corre en `PLAINTEXT`, sin autenticación ni cifrado, así que publicar la IP exacta de un broker real en un repo público facilita el reconocimiento de red a cualquiera que ya tenga acceso a esa LAN. Si necesitas apuntar a un broker en una IP específica, hazlo vía variable de entorno (`SPRING_KAFKA_BOOTSTRAP_SERVERS`) en tu entorno local, nunca commiteando el valor real en `application.yaml`.
 
 ## Cómo ejecutar todo el stack localmente
 
